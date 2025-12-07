@@ -21,7 +21,7 @@ gui.Parent = game:GetService("CoreGui")
 local launcher = Instance.new("TextButton")
 launcher.Size = UDim2.new(0, 40, 0, 40)
 launcher.Position = UDim2.new(0, 15, 0.5, -20)
-launcher.Text = "LA"
+launcher.Text = "SS2"
 launcher.Font = Enum.Font.Code
 launcher.TextColor3 = Color3.fromRGB(180, 0, 255)
 launcher.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
@@ -44,7 +44,7 @@ local round2 = Instance.new("UICorner"); round2.CornerRadius = UDim.new(0,12); r
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1,0,0,30)
 title.BackgroundTransparency = 1
-title.Text = "Legit Aim"
+title.Text = "SynSense V2"
 title.Font = Enum.Font.Code
 title.TextColor3 = Color3.fromRGB(180,0,255)
 title.TextSize = 18
