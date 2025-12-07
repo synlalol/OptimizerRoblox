@@ -15,7 +15,7 @@ local rnd = Random.new(tick() % 1e9)
 -- ---------- GUI ----------
 local gui = Instance.new("ScreenGui")
 gui.ResetOnSpawn = false
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+gui.Parent = game:GetService("CoreGui")
 
 -- Launcher Button
 local launcher = Instance.new("TextButton")
