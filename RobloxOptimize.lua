@@ -1,8 +1,3 @@
--- Legit Aim — Full Script (Wall Highlight added)
--- Features: Launcher, Aim (delay/smooth/jitter/random offset), Distance-based smoothing, Humanize Aim (threshold editable),
--- Visuals (ESP, tracers, name, Wall Highlight), Misc (Head copy for everyone), dead-checks
-
--- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
