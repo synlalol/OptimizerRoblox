@@ -27,9 +27,13 @@ launcher.TextColor3 = Color3.fromRGB(180, 0, 255)
 launcher.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 launcher.BorderSizePixel = 0
 launcher.AutoButtonColor = false
+launcher.Active = true      -- Enable dragging
+launcher.Draggable = true   -- Enable dragging
 launcher.Parent = gui
-local round1 = Instance.new("UICorner"); round1.CornerRadius = UDim.new(0,10); round1.Parent = launcher
 
+local round1 = Instance.new("UICorner")
+round1.CornerRadius = UDim.new(0,10)
+round1.Parent = launcher
 -- Panel
 local panel = Instance.new("Frame")
 panel.Size = UDim2.new(0, 300, 0, 200)
