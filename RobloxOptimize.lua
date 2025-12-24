@@ -291,12 +291,6 @@ local function partIsBehindWall(part, player)
 	local dir = (part.Position - origin)
 	local hit = workspace:FindPartOnRay(Ray.new(origin, dir.Unit * (dir.Magnitude + 1)), LocalPlayer.Character)
 	if hit and not hit:IsDescendantOf(player.Character) then
-		return true
-	end
-	return false
-end
-
--- ---------- Head copies (Misc) ----------
 local headCopies = {} -- player -> {Part, Scale}
 local spawnedForAll = false
 
@@ -415,8 +409,243 @@ Players.PlayerAdded:Connect(function(p)
 	createESP(p)
 	p.CharacterAdded:Connect(function(char) handleCharacter(p, char) end)
 end)
+Players.PlayerRemoving:Connect(function(p) removeESP(p); removeHeadCopyFor(p); humanBlocked[p] = nil end)
+method:
+Toggle.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    Toggle.Text = "Toggle: " .. (toggled and "ON" or "OFF")
+end)
+
+VisToggle.MouseButton1Click:Connect(function()
+    visible = not visible
+    VisToggle.Text = "Hitbox Visible: " .. (visible and "ON" or "OFF")
+end)
+
+TeamToggle.MouseButton1Click:Connect(function()
+    ignoreTeam = not ignoreTeam
+    TeamToggle.Text = "Ignore Team: " .. (ignoreTeam and "ON" or "OFF")
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not toggled then
+        return
+    end
+
+    local size = tonumber(SizeBox.Text)
+    if not size then return end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer 
+        and player.Character 
+        and player.Character:FindFirstChild(currentPart) 
+        and (not ignoreTeam or player.Team ~= LocalPlayer.Team) then
+            
+            local part = player.Character[currentPart]
+            if part:IsA("BasePart") then
+                part.Size = Vector3.new(size, size, size)
+                part.CanCollide = false
+
+                if visible then
+                    part.Transparency = 0.5
+                    part.Material = Enum.Material.ForceField
+                else
+                    part.Transparency = 1
+                    part.Material = Enum.Material.Plastic
+                end
+            end
+        end
+    end
+end)local headCopies = {} -- player -> {Part, Scale}
+local spawnedForAll = false
+
+local function createHeadCopyFor(player, scale)
+	if not player or player == LocalPlayer then return nil end
+	if not player.Character then return nil end
+	local head = player.Character:FindFirstChild("Head")
+	local humanoid = player.Character:FindFirstChild("Humanoid")
+	if humanoid and humanoid.Health <= 0 then return nil end
+	if not head then return nil end
+
+	-- remove existing
+	if headCopies[player] then
+		pcall(function() headCopies[player].Part:Destroy() end)
+		headCopies[player] = nil
+	end
+
+	local ok, clone = pcall(function() return head:Clone() end)
+	if not ok or not clone then return nil end
+	clone.Name = "Head"
+	clone.Parent = workspace
+	clone.CanCollide = false
+	if clone:IsA("BasePart") then
+		clone.Anchored = true
+		local scaleNum = tonumber(scale) or 3
+		clone.Size = clone.Size * scaleNum
+		for _, child in pairs(clone:GetChildren()) do
+			if child:IsA("SpecialMesh") then
+				child.Scale = child.Scale * scaleNum
+			end
+		end
+	else
+		clone:Destroy()
+		return nil
+	end
+
+	headCopies[player] = {Part = clone, Scale = tonumber(scale) or 3, Target = player}
+	return headCopies[player]
+end
+
+local function removeHeadCopyFor(player)
+	if headCopies[player] then
+		pcall(function() if headCopies[player].Part then headCopies[player].Part:Destroy() end end)
+		headCopies[player] = nil
+	end
+end
+
+local function spawnHeadCopiesForAll()
+	local scale = tonumber(headScaleBox.Text) or 3
+	for _, p in pairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character then
+			local hum = p.Character:FindFirstChild("Humanoid")
+			if hum and hum.Health > 0 then
+				pcall(function() createHeadCopyFor(p, scale) end)
+			end
+		end
+	end
+	spawnedForAll = true
+	spawnBtn.Text = "Remove Head Copies"
+end
+
+local function removeAllHeadCopies()
+	for p,_ in pairs(headCopies) do removeHeadCopyFor(p) end
+	spawnedForAll = false
+	spawnBtn.Text = "Spawn Head Copies (Everyone)"
+end
+
+spawnBtn.MouseButton1Click:Connect(function()
+	if spawnedForAll then removeAllHeadCopies() else spawnHeadCopiesForAll() end
+end)
+
+-- Character/humanoid monitoring (dead-check + auto respawn copy)
+local function handleCharacter(player, character)
+	if not player or not character then return end
+	local humanoid = character:FindFirstChildWhichIsA("Humanoid") or character:FindFirstChild("Humanoid")
+	if humanoid then
+		if humanoid.Health <= 0 then removeHeadCopyFor(player) end
+		local conn
+		conn = humanoid.HealthChanged:Connect(function(hp)
+			if not player then
+				if conn then pcall(function() conn:Disconnect() end) end
+				return
+			end
+			if hp <= 0 then
+				removeHeadCopyFor(player)
+				-- also clear humanBlocked if they die (so they don't stay blocked)
+				humanBlocked[player] = nil
+			else
+				-- revived: if spawnedForAll, create
+				if spawnedForAll then
+					task.delay(0.1, function()
+						if player and player.Character and player.Character.Parent then
+							pcall(function() createHeadCopyFor(player, tonumber(headScaleBox.Text) or 3) end)
+						end
+					end)
+				end
+			end
+		end)
+		player.CharacterRemoving:Connect(function()
+			removeHeadCopyFor(player)
+			humanBlocked[player] = nil
+			if conn then pcall(function() conn:Disconnect() end); conn = nil end
+		end)
+	else
+		removeHeadCopyFor(player)
+		humanBlocked[player] = nil
+	end
+end
+
+-- attach for existing & future
+for _, p in pairs(Players:GetPlayers()) do
+	if p.Character then handleCharacter(p, p.Character) end
+	p.CharacterAdded:Connect(function(char) handleCharacter(p, char) end)
+end
+Players.PlayerAdded:Connect(function(p)
+	createESP(p)
+	p.CharacterAdded:Connect(function(char) handleCharacter(p, char) end)
+end)
+Players.PlayerRemoving:Connect(function(p) removeESP(p); removeHeadCopyFor(p); humanBlocked[p] = nil end)
+method:
+Toggle.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    Toggle.Text = "Toggle: " .. (toggled and "ON" or "OFF")
+end)
+
+VisToggle.MouseButton1Click:Connect(function()
+    visible = not visible
+    VisToggle.Text = "Hitbox Visible: " .. (visible and "ON" or "OFF")
+end)
+
+TeamToggle.MouseButton1Click:Connect(function()
+    ignoreTeam = not ignoreTeam
+    TeamToggle.Text = "Ignore Team: " .. (ignoreTeam and "ON" or "OFF")
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not toggled then
+        return
+    end
+
+    local size = tonumber(SizeBox.Text)
+    if not size then return end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer 
+        and player.Character 
+        and player.Character:FindFirstChild(currentPart) 
+        and (not ignoreTeam or player.Team ~= LocalPlayer.Team) then
+            
+            local part = player.Character[currentPart]
+            if part:IsA("BasePart") then
+                part.Size = Vector3.new(size, size, size)
+                part.CanCollide = false
+
+                if visible then
+                    part.Transparency = 0.5
+                    part.Material = Enum.Material.ForceField
+                else
+                    part.Transparency = 1
+                    part.Material = Enum.Material.Plastic
+                end
+            end
+        end
+    end
+end)
+		return true
+	end
+	return false
+end
+
+-- ---------- Head copies (Misc) ----------
 local headCopies = {} -- player -> {Part, Scale}
 local spawnedForAll = false
+
+local function createHeadCopyFor(player, scale)
+	if not player or player == LocalPlayer then return nil end
+	if not player.Character then return nil end
+	local head = player.Character:FindFirstChild("Head")
+	local humanoid = player.Character:FindFirstChild("Humanoid")
+	if humanoid and humanoid.Health <= 0 then return nil end
+	if not head then return nil end
+
+	-- remove existing
+	if headCopies[player] then
+		pcall(function() headCopies[player].Part:Destroy() end)
+		headCopies[player] = nil
+	end
+
+	local ok, clone = pcall(function() return head:Clone() end)
+	if not ok or not clone then return nil end
+
 
 -- Create a head hitbox copy for a player
 local function createHeadCopyFor(player, scale)
