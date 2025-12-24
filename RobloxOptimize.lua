@@ -415,20 +415,181 @@ Players.PlayerAdded:Connect(function(p)
 	createESP(p)
 	p.CharacterAdded:Connect(function(char) handleCharacter(p, char) end)
 end)
-Players.PlayerRemoving:Connect(function(p) removeESP(p); removeHeadCopyFor(p); humanBlocked[p] = nil end)
+local headCopies = {} -- player -> {Part, Scale}
+local spawnedForAll = false
 
--- ---------- Main Run loop (with Wall Highlight) ----------
+-- Create a head hitbox copy for a player
+local function createHeadCopyFor(player, scale)
+    if not player or player == LocalPlayer then return nil end
+    if not player.Character then return nil end
+    local head = player.Character:FindFirstChild("Head")
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if humanoid and humanoid.Health <= 0 then return nil end
+    if not head then return nil end
+
+    -- remove existing copy
+    if headCopies[player] then
+        pcall(function() headCopies[player].Part:Destroy() end)
+        headCopies[player] = nil
+    end
+
+    local ok, clone = pcall(function() return head:Clone() end)
+    if not ok or not clone then return nil end
+    clone.Name = "HeadHitbox"
+    clone.Parent = workspace
+    clone.CanCollide = false
+    clone.Anchored = true
+
+    local scaleNum = tonumber(scale) or 3
+    clone.Size = head.Size * scaleNum
+    for _, child in pairs(clone:GetChildren()) do
+        if child:IsA("SpecialMesh") then
+            child.Scale = child.Scale * scaleNum
+        end
+    end
+
+    -- Initial visibility
+    clone.Transparency = visible and 0.5 or 1
+    clone.Material = visible and Enum.Material.ForceField or Enum.Material.Plastic
+
+    headCopies[player] = {Part = clone, Scale = scaleNum, Target = player}
+    return headCopies[player]
+end
+
+local function removeHeadCopyFor(player)
+    if headCopies[player] then
+        pcall(function() if headCopies[player].Part then headCopies[player].Part:Destroy() end end)
+        headCopies[player] = nil
+    end
+end
+
+local function spawnHeadCopiesForAll()
+    local scale = tonumber(headScaleBox.Text) or 3
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                pcall(function() createHeadCopyFor(p, scale) end)
+            end
+        end
+    end
+    spawnedForAll = true
+    spawnBtn.Text = "Remove Head Copies"
+end
+
+local function removeAllHeadCopies()
+    for p,_ in pairs(headCopies) do removeHeadCopyFor(p) end
+    spawnedForAll = false
+    spawnBtn.Text = "Spawn Head Copies (Everyone)"
+end
+
+spawnBtn.MouseButton1Click:Connect(function()
+    if spawnedForAll then removeAllHeadCopies() else spawnHeadCopiesForAll() end
+end)
+
+-- Handle character respawns and death
+local function handleCharacter(player, character)
+    if not player or not character then return end
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid") or character:FindFirstChild("Humanoid")
+    if humanoid then
+        if humanoid.Health <= 0 then removeHeadCopyFor(player) end
+        local conn
+        conn = humanoid.HealthChanged:Connect(function(hp)
+            if not player then
+                if conn then pcall(function() conn:Disconnect() end) end
+                return
+            end
+            if hp <= 0 then
+                removeHeadCopyFor(player)
+                humanBlocked[player] = nil
+            else
+                if spawnedForAll then
+                    task.delay(0.1, function()
+                        if player and player.Character and player.Character.Parent then
+                            pcall(function() createHeadCopyFor(player, tonumber(headScaleBox.Text) or 3) end)
+                        end
+                    end)
+                end
+            end
+        end)
+        player.CharacterRemoving:Connect(function()
+            removeHeadCopyFor(player)
+            humanBlocked[player] = nil
+            if conn then pcall(function() conn:Disconnect() end); conn = nil end
+        end)
+    else
+        removeHeadCopyFor(player)
+        humanBlocked[player] = nil
+    end
+end
+
+-- Attach to existing and new players
+for _, p in pairs(Players:GetPlayers()) do
+    if p.Character then handleCharacter(p, p.Character) end
+    p.CharacterAdded:Connect(function(char) handleCharacter(p, char) end)
+end
+Players.PlayerAdded:Connect(function(p)
+    createESP(p)
+    p.CharacterAdded:Connect(function(char) handleCharacter(p, char) end)
+end)
+Players.PlayerRemoving:Connect(function(p) 
+    removeESP(p)
+    removeHeadCopyFor(p)
+    humanBlocked[p] = nil 
+end)
+
+-- Toggles
+Toggle.MouseButton1Click:Connect(function()
+    toggled = not toggled
+    Toggle.Text = "Toggle: " .. (toggled and "ON" or "OFF")
+end)
+
+VisToggle.MouseButton1Click:Connect(function()
+    visible = not visible
+    VisToggle.Text = "Hitbox Visible: " .. (visible and "ON" or "OFF")
+end)
+
+TeamToggle.MouseButton1Click:Connect(function()
+    ignoreTeam = not ignoreTeam
+    TeamToggle.Text = "Ignore Team: " .. (ignoreTeam and "ON" or "OFF")
+end)
+
+-- Update hitbox every frame
 RunService.RenderStepped:Connect(function()
-	-- params
-	local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-	local fovRadius = tonumber(fovSizeBox.Text) or 100
-	local delayTime = tonumber(delayBox.Text) or 0.5
-	local offsetInterval = tonumber(randIntervalBox.Text) or 1.0
-	local jitterAmount = tonumber(jitterBox.Text) or 0.05
-	local smoothTextboxVal = tonumber(smoothBox.Text) or 0.2
-	local distanceLimit = tonumber(distanceBox.Text) or 100
-	local aimPartSelected = aimPartDropdown()
+    if not toggled then return end
+    local scale = tonumber(SizeBox.Text)
+    if not scale then return end
 
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer 
+        and player.Character 
+        and player.Character:FindFirstChild("Head")
+        and (not ignoreTeam or player.Team ~= LocalPlayer.Team) then
+
+            local copyData = headCopies[player]
+            if not copyData then
+                -- auto-create if missing
+                createHeadCopyFor(player, scale)
+                copyData = headCopies[player]
+            end
+
+            if copyData and copyData.Part then
+                local head = player.Character.Head
+                copyData.Part.CFrame = head.CFrame
+                copyData.Part.Size = head.Size * scale
+                copyData.Part.CanCollide = false
+
+                if visible then
+                    copyData.Part.Transparency = 0.5
+                    copyData.Part.Material = Enum.Material.ForceField
+                else
+                    copyData.Part.Transparency = 1
+                    copyData.Part.Material = Enum.Material.Plastic
+                end
+            end
+        end
+    end
+end)
 	-- smoothness caps for distance-based mode
 	local minSmooth = 0.1
 	local maxSmooth = 0.4
