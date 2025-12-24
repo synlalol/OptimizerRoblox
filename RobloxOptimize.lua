@@ -48,7 +48,7 @@ local round2 = Instance.new("UICorner"); round2.CornerRadius = UDim.new(0,12); r
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1,0,0,30)
 title.BackgroundTransparency = 1
-title.Text = "SynSense V2"
+title.Text = "SynSense V2.1"
 title.Font = Enum.Font.Code
 title.TextColor3 = Color3.fromRGB(180,0,255)
 title.TextSize = 18
